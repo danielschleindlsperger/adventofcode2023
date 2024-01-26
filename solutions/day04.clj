@@ -1,7 +1,8 @@
 (ns adventofcode2023.day04
   (:require [clojure.string :as str]
             [clojure.set :as set]
-            [clojure.math :as math]))
+            [clojure.math :as math]
+            [clojure.pprint :refer [pprint]]))
 
 (def example-input
   "Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
@@ -12,17 +13,37 @@ Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
 Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11
 ")
 
+(defn card-worth
+  [card]
+  (let [winning-count (count (:matching-numbers card))]
+    (loop [i 0
+           worth 0]
+      (if (= i winning-count)
+        worth
+        (recur (inc i) (if (zero? worth) 1 (* 2 worth)))))))
+
 (defn parse-card-line
   [s]
-  (let [[_ winning-numbers] (re-find #"\:\s*(\d.*) \|" s)
+  (let [[_ card-num] (re-find #"Card\s*(\d*)\:" s)
+        [_ winning-numbers] (re-find #"\:\s*(\d.*) \|" s)
         winning-numbers (->> (str/split winning-numbers #" ")
-                             (map parse-long))
+                             (map str/trim)
+                             (filter (complement str/blank?))
+                             (map parse-long)
+                             (set))
         [_ given-numbers] (re-find #"\|\s*(\d.*)" s)
         given-numbers (->> (str/split given-numbers #" ")
+                           (map str/trim)
+                           (filter (complement str/blank?))
                            (map parse-long)
-                           (filter some?))]
-    {:winning-numbers (set winning-numbers),
-     :given-numbers (set given-numbers)}))
+                           (set))
+        card {:card-num (parse-long card-num),
+              :winning-numbers winning-numbers,
+              :given-numbers given-numbers,
+              :matching-numbers (set/intersection winning-numbers
+                                                  given-numbers)}]
+    (-> card
+        (assoc :card-worth (card-worth card)))))
 
 (comment
   (parse-card-line "Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53"))
@@ -36,23 +57,42 @@ Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11
 (comment
   (parse-cards example-input))
 
-(defn card-worth
-  [card]
-  (let [winning-count (count (set/intersection (:winning-numbers card)
-                                               (:given-numbers card)))]
-    (loop [i 0
-           worth 0]
-      (if (= i winning-count)
-        worth
-        (recur (inc i) (if (zero? worth) 1 (* 2 worth)))))))
-
 (defn total-points
   [input]
   (->> (parse-cards input)
-       (map card-worth)
+       (map #(get % :card-worth))
        (reduce +)))
 
 (comment
-  (total-points example-input)
+  (total-points example-input) ;; => 13
   (total-points (slurp "../inputs/day04.txt")) ;; => 32609
+)
+
+;; Part 2
+;;
+
+(defn add-cards
+  [all-cards curr-card]
+  (let [matching-nums (count (:matching-numbers curr-card))
+        card-idx (dec (:card-num curr-card))]
+    (subvec all-cards (inc card-idx) (inc (+ card-idx matching-nums)))))
+
+(defn total-card-count
+  [input]
+  (let [cards (vec (parse-cards input))
+        cards-by-num (reduce (fn [by-num card]
+                               (assoc by-num (:card-num card) card))
+                       {}
+                       cards)]
+    (loop [owned-cards cards
+           i 0]
+      (if (>= i (count owned-cards))
+        (count owned-cards)
+        (let [curr-card (get owned-cards i)]
+          (recur (vec (concat owned-cards (add-cards cards curr-card)))
+                 (inc i)))))))
+
+(comment
+  (total-card-count example-input) ;; => 30
+  (total-card-count (slurp "../inputs/day04.txt")) ;; =>
 )
